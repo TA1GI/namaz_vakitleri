@@ -5,7 +5,7 @@
 
 // AYARLAR
 define('BATCH_LIMIT', 15); // Her seferde kaç ilçe indirilsin?
-define('DATA_DIR', '.');   // DİKKAT: Dosyalar ana dizine (root) insin.
+define('DATA_DIR', '.');   // Dosyalar ana dizine (root) insin.
 
 // BAŞLANGIÇ
 @set_time_limit(0);
@@ -23,10 +23,8 @@ function archiveOldFiles() {
         return;
     }
 
-    $current_year = (int)date('Y'); // Örn: 2026
-    $last_year = $current_year - 1; // Örn: 2025
-    
-    // Arşiv klasörünün yolu: ./2025
+    $current_year = (int)date('Y'); 
+    $last_year = $current_year - 1; 
     $archive_folder = DATA_DIR . '/' . $last_year;
     
     // Arşiv zaten varsa işlem yapma
@@ -37,11 +35,10 @@ function archiveOldFiles() {
     echo "[ARŞİV] $last_year klasörü oluşturuluyor...\n";
     mkdir($archive_folder, 0755, true);
     
-    // Ana dizindeki json dosyalarını bul
     $files = glob(DATA_DIR . '/*.json');
 
     foreach ($files as $file) {
-        // Dosya zaten bir arşiv klasörünün içindeyse atla (./2024/dosya.json gibi)
+        // Dosya zaten bir arşiv klasörünün içindeyse atla
         if (dirname($file) !== '.') {
             continue;
         }
@@ -223,10 +220,20 @@ foreach ($locations as $province => $districts) {
         $filename = "{$sanitized_name}_{$district_id}.json";
         $filepath = DATA_DIR . '/' . $filename;
 
-        // Dosya zaten varsa ve boyutu 0 değilse atla (Zaten indirilmiş)
+        // --- GÜNCELLEME BURADA YAPILDI ---
+        // Dosya varsa, içindeki yıla bak. Eğer hedef yıl (2026) içeriyorsa atla.
+        // İçermiyorsa (eski 2025 dosyasıysa), indirmeye devam et ve üzerine yaz.
         if (file_exists($filepath) && filesize($filepath) > 0) {
-            continue;
+            $content = json_decode(file_get_contents($filepath), true);
+            if (is_array($content) && !empty($content)) {
+                $last_entry = end($content);
+                // Son kaydın tarihine bak, hedef yılı içeriyor mu?
+                if (isset($last_entry['miladiTarih']) && strpos($last_entry['miladiTarih'], (string)$target_year) !== false) {
+                    continue; // Dosya zaten güncel, atla.
+                }
+            }
         }
+        // ---------------------------------
 
         echo "İndiriliyor: $province - $district_name ($district_id) ... ";
         $html = fetchPrayerTimesHtml($district_id, $target_year);
