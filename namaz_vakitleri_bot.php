@@ -4,7 +4,7 @@
 // =============================================================
 
 // AYARLAR
-define('BATCH_LIMIT', 15); // Her çalışmada indirilecek ilçe sayısı
+define('BATCH_LIMIT', 100); // Her çalışmada indirilecek ilçe sayısı
 define('DATA_DIR', '.');   // Dosyalar ana dizine kaydedilir
 
 // BAŞLANGIÇ AYARLARI
@@ -287,4 +287,5 @@ if ($downloaded_count == 0) {
     echo "Tüm ilçeler zaten güncel!\n";
 }
 ?>
+
 
