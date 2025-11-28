@@ -1,13 +1,14 @@
 <?php
 // =============================================================
-// NAMAZ VAKİTLERİ OTOMASYON BOTU (FİNAL SÜRÜM - v2.0)
+// NAMAZ VAKİTLERİ OTOMASYON BOTU (FİNAL PRODUCTION - v4.0)
 // =============================================================
 
 // AYARLAR
-define('BATCH_LIMIT', 1000); // Her çalışmada indirilecek ilçe sayısı
-define('DATA_DIR', '.');   // Dosyalar ana dizine kaydedilir
+define('BATCH_LIMIT', 1000); // Tek seferde tüm Türkiye'yi (810+) denesin.
+define('DATA_DIR', '.');     // Ana dizine kaydet.
+define('MAX_CONSECUTIVE_ERRORS', 5); // Üst üste 5 hata alırsa ban yedik demektir, DUR.
 
-// BAŞLANGIÇ AYARLARI
+// BAŞLANGIÇ
 @set_time_limit(0);
 ignore_user_abort(true);
 date_default_timezone_set('Europe/Istanbul');
@@ -15,81 +16,61 @@ ini_set('display_errors', 1);
 error_reporting(E_ALL);
 
 // =============================================================
-// 1. ARŞİVLEME MODÜLÜ (AKILLI)
+// 1. ARŞİVLEME MODÜLÜ (YILBAŞI TEMİZLİĞİ)
 // =============================================================
 function archiveOldFiles() {
     // Sadece Ocak ayının ilk 15 gününde çalışsın
-    // NOT: Test etmek isterseniz bu if satırını geçici olarak yorum satırı yapabilirsiniz.
     if (date('m') != '01' || date('d') > 15) return;
 
     $current_year = (int)date('Y'); 
     $last_year = $current_year - 1; 
     $archive_folder = DATA_DIR . '/' . $last_year;
     
-    // Arşiv klasörü yoksa oluştur
-    if (!is_dir($archive_folder)) {
-        echo "[ARŞİV] $last_year klasörü oluşturuluyor...\n";
-        mkdir($archive_folder, 0755, true);
-    }
+    // Arşiv klasörü zaten varsa işlem yapma
+    if (is_dir($archive_folder)) return;
 
-    // Ana dizindeki json dosyalarını bul ve taşı
+    echo "[ARŞİV] $last_year klasörü oluşturuluyor...\n";
+    mkdir($archive_folder, 0755, true);
+    
     $files = glob(DATA_DIR . '/*.json');
-    $moved_count = 0;
-    
     foreach ($files as $file) {
-        // Dosya zaten bir alt klasördeyse (örn: ./2025/...) atla
+        // Alt klasörleri hariç tut
         if (dirname($file) !== '.') continue;
-        
-        $filename = basename($file);
-        // Dosyayı arşive taşı
-        if (rename($file, $archive_folder . '/' . $filename)) {
-            $moved_count++;
-        }
+        rename($file, $archive_folder . '/' . basename($file));
     }
-    
-    if ($moved_count > 0) {
-        echo "[ARŞİV] $moved_count adet eski dosya '$last_year' klasörüne taşındı.\n";
-    }
+    echo "[ARŞİV] Eski dosyalar taşındı.\n";
 }
 
-// Arşivlemeyi başlat
 archiveOldFiles();
 
 // =============================================================
-// 2. İNDİRİLECEK YILI BELİRLEME
+// 2. YIL BELİRLEME
 // =============================================================
 $target_year = (int)date('Y') + 1; 
+// Ocak ayındaysak o yılı (2026) indir
 if (date('m') == '01') {
     $target_year = (int)date('Y');
 }
 
-// DİKKAT: 2026 verisi olmadığı için sistemin çalıştığını
-// şu an görebilmek adına test amaçlı 2025'e sabitliyorum.
-// Yılbaşından sonra bu satırı silebilirsin:
-$target_year = 2025; 
+// TEST İÇİN MANUEL AYAR (İşiniz bitince bu satırı silin veya yorum yapın)
+// $target_year = 2025; 
 
 echo "Hedef Yıl: $target_year\n";
+echo "Limit: " . BATCH_LIMIT . "\n";
 
 // =============================================================
-// 3. FONKSİYONLAR (Gelişmiş)
+// 3. FONKSİYONLAR
 // =============================================================
 
 function fetchPrayerTimesHtml($district_id, $year) {
     $url = "https://namazvakitleri.diyanet.gov.tr/tr-TR/{$district_id}";
     $ch = curl_init($url);
-    
-    // Diyanet'in bot korumasını aşmak için gerekli başlıklar
     $headers = [
         'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
         'Referer: https://namazvakitleri.diyanet.gov.tr/',
-        'Origin: https://namazvakitleri.diyanet.gov.tr',
-        'Upgrade-Insecure-Requests: 1',
-        'Sec-Fetch-Site: same-origin',
-        'Sec-Fetch-Mode: navigate',
         'Connection: keep-alive'
     ];
-
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
     curl_setopt($ch, CURLOPT_TIMEOUT, 30);
@@ -98,14 +79,13 @@ function fetchPrayerTimesHtml($district_id, $year) {
     curl_setopt($ch, CURLOPT_POST, true);
     curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query(['year' => $year]));
     
-    // Cookie yönetimi (Gerekirse diye)
+    // Cookie simülasyonu
     curl_setopt($ch, CURLOPT_COOKIEJAR, 'cookie.txt');
     curl_setopt($ch, CURLOPT_COOKIEFILE, 'cookie.txt');
 
     $response = curl_exec($ch);
     $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     curl_close($ch);
-
     return ($http_code === 200) ? $response : false;
 }
 
@@ -115,9 +95,7 @@ function parsePrayerTimes($html) {
     @$dom->loadHTML('<?xml encoding="utf-8" ?>' . $html);
     $xpath = new DOMXPath($dom);
     $rows = $xpath->query('//div[@id="tab-2"]//table/tbody/tr');
-    
     if ($rows->length == 0) return null;
-
     $data = [];
     foreach ($rows as $row) {
         $cells = $row->getElementsByTagName('td');
@@ -144,7 +122,7 @@ function sanitizeDistrictName($name) {
     return strtoupper($name);
 }
 
-// TAM İLÇE LİSTESİ
+// TAM LİSTE
 $locations_json = '{
     "Adana": {"Adana":9146,"Aladağ":9147,"Ceyhan":9148,"Feke":9149,"İmamoğlu":9150,"Karaisalı":9151,"Karataş":9152,"Kozan":9153,"Pozantı":9154,"Saimbeyli":9155,"Tufanbeyli":9156,"Yumurtalık":9157},
     "Adıyaman": {"Adıyaman":9158,"Besni":9159,"Çelikhan":9160,"Gerger":9161,"Gölbaşı":9162,"Kahta":9163,"Samsat":9164,"Sincik":9165,"Tut":9166},
@@ -235,13 +213,21 @@ $locations = json_decode($locations_json, true);
 // =============================================================
 
 $downloaded_count = 0;
+$consecutive_errors = 0; // Üst üste hata sayacı
 
 foreach ($locations as $province => $districts) {
     foreach ($districts as $district_name => $district_id) {
         
+        // Kotayı ve Hata Limitini kontrol et
         if ($downloaded_count >= BATCH_LIMIT) {
             echo "--------------------------------------------------\n";
-            echo "[LİMİT] Kota doldu ($downloaded_count ilçe), işlem durduruluyor.\n";
+            echo "[LİMİT] Kota doldu ($downloaded_count ilçe). İşlem durduruluyor.\n";
+            exit;
+        }
+        
+        if ($consecutive_errors >= MAX_CONSECUTIVE_ERRORS) {
+            echo "--------------------------------------------------\n";
+            echo "[HATA] Üst üste $consecutive_errors kez hata alındı (IP Engeli olabilir). İşlem durduruluyor.\n";
             exit;
         }
 
@@ -249,13 +235,13 @@ foreach ($locations as $province => $districts) {
         $filename = "{$sanitized_name}_{$district_id}.json";
         $filepath = DATA_DIR . '/' . $filename;
 
-        // İÇERİK KONTROLÜ: Dosya varsa ve hedef yılı içeriyorsa ATLA
+        // İÇERİK KONTROLÜ
         if (file_exists($filepath) && filesize($filepath) > 0) {
             $content = json_decode(file_get_contents($filepath), true);
             if (is_array($content) && !empty($content)) {
                 $last_entry = end($content);
                 if (isset($last_entry['miladiTarih']) && strpos($last_entry['miladiTarih'], (string)$target_year) !== false) {
-                    continue;
+                    continue; 
                 }
             }
         }
@@ -266,19 +252,21 @@ foreach ($locations as $province => $districts) {
         if ($html) {
             $data = parsePrayerTimes($html);
             if ($data && count($data) > 10) { 
-                // DİKKAT: İşte burası eksikti, şimdi eklendi.
                 if(file_put_contents($filepath, json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE))) {
                     echo "OK (" . count($data) . " gün veri)\n";
                     $downloaded_count++;
+                    $consecutive_errors = 0; // Başarılı olunca sayacı sıfırla
                 } else {
                     echo "HATA (Dosya yazılamadı)\n";
                 }
-                sleep(rand(2, 5)); 
+                sleep(rand(2, 5));
             } else {
-                echo "HATA (Veri Yok veya Parse Edilemedi)\n";
+                echo "HATA (Veri Yok)\n";
+                $consecutive_errors++; // Hata sayacını artır
             }
         } else {
             echo "HATA (Bağlantı)\n";
+            $consecutive_errors++; // Hata sayacını artır
         }
     }
 }
@@ -287,6 +275,3 @@ if ($downloaded_count == 0) {
     echo "Tüm ilçeler zaten güncel!\n";
 }
 ?>
-
-
-
