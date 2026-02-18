@@ -1,0 +1,48 @@
+name: Bayram Namazı Vakitlerini Güncelle
+
+on:
+  # Elle tetikleme (GitHub'da "Actions" sekmesinden "Run workflow" ile)
+  workflow_dispatch:
+  
+  # Yılda bir kez otomatik çalış (Ocak ayının 15'inde)
+  schedule:
+    - cron: '0 6 15 1 *'
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120  # Tüm ilçeler ~60dk sürebilir
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Python kur
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Bağımlılıkları yükle
+        run: pip install requests
+
+      - name: Scraper'ı çalıştır
+        run: python scripts/scrape_bayram_namazi.py
+
+      - name: Sonuçları kontrol et
+        run: |
+          if [ -f bayram_namazi.json ]; then
+            echo "✅ bayram_namazi.json oluşturuldu"
+            echo "Boyut: $(wc -c < bayram_namazi.json) byte"
+            echo "İlçe sayısı: $(python3 -c 'import json; print(len(json.load(open("bayram_namazi.json"))))')"
+          else
+            echo "❌ bayram_namazi.json bulunamadı!"
+            exit 1
+          fi
+
+      - name: Commit ve Push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add bayram_namazi.json
+          git diff --cached --quiet || git commit -m "Bayram namazı vakitleri güncellendi ($(date +'%Y'))"
+          git push
