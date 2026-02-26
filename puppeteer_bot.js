@@ -58,25 +58,23 @@ async function scrapePrayerTimes() {
             // Yıllık veriyi alabilmek için, tıpkı tarayıcıda olduğu gibi "Yıl" listesini bulup tıklamamız gerekiyor
             // Ancak, en garantili yol: POST ile veya AJAX benzeri form göndererek 2026 bilgisini yollamaktır.
 
-            // Eğer dropdown form (form id'si belli değil ama action belli) üzerinden ilerleyeceksek, jQuery veya form submit kullanabiliriz
-            // Sayfada "#tab-2" veya yıllık sekme yoksa, form id'si üzerinden "year=2026" göndererek sayfayı POST ile bir daha yüklemesini sağlayalım
-            await page.evaluate((id) => {
-                // Sayfada varsayılan yıl yoksa Diyanet bir post formuna ihtiyaç duyar:
-                const form = document.createElement("form");
-                form.method = "POST";
-                form.action = `/tr-TR/${id}`;
-                const yrInput = document.createElement("input");
-                yrInput.name = "year";
-                yrInput.value = "2026";
-                form.appendChild(yrInput);
-                document.body.appendChild(form);
-                form.submit();
-            }, districtId);
+            // Race condition (yarış durumu) olmaması için form submit işlemi ile sayfa bekleme işlemini eşzamanlı başlatıyoruz:
+            await Promise.all([
+                page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 30000 }),
+                page.evaluate((id) => {
+                    const form = document.createElement("form");
+                    form.method = "POST";
+                    form.action = `/tr-TR/${id}`;
+                    const yrInput = document.createElement("input");
+                    yrInput.name = "year";
+                    yrInput.value = "2026";
+                    form.appendChild(yrInput);
+                    document.body.appendChild(form);
+                    form.submit();
+                }, districtId)
+            ]);
 
-            // Post atıldıktan sonra yeni sayfanın yüklenmesini bekle
-            await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 30000 });
-
-            // Şimdi tab-2 yüklenecek ve 365 gün gelecek
+            // Şimdi post atıldı ve yeni sayfanın tab-2'sinde 365 gün yüklendi
             await page.waitForSelector('#tab-2 table tbody tr', { timeout: 15000 });
 
             // Sayfanın DOM yapısına erişip JSON verisini ayıkla
