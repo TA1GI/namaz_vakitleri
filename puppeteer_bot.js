@@ -44,7 +44,7 @@ async function scrapePrayerTimes() {
 
     for (const [districtName, districtId] of Object.entries(hata_veren_ilceler)) {
         // Her ilçe için TAMAMEN izole edilmiş (çerez, önbellek sıfır) yeni bir gizli pencere aç (Session çakışmasını önler)
-        const context = await browser.createIncognitoBrowserContext();
+        const context = await browser.createBrowserContext();
         const page = await context.newPage();
         await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
 
