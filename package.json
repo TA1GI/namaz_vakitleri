@@ -1,0 +1,11 @@
+{
+    "name": "namaz-vakitleri-bot",
+    "version": "1.0.0",
+    "description": "Namaz vakitleri Diyanet bot scraper",
+    "main": "puppeteer_bot.js",
+    "dependencies": {
+        "puppeteer": "^22.0.0"
+    },
+    "author": "Antigravity",
+    "license": "ISC"
+}
