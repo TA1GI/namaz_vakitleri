@@ -43,8 +43,9 @@ async function scrapePrayerTimes() {
     });
 
     for (const [districtName, districtId] of Object.entries(hata_veren_ilceler)) {
-        // Her ilçe için tertemiz yepyeni bir sekme aç (Eskiden kalan event/cookie kirliliğini önler)
-        const page = await browser.newPage();
+        // Her ilçe için TAMAMEN izole edilmiş (çerez, önbellek sıfır) yeni bir gizli pencere aç (Session çakışmasını önler)
+        const context = await browser.createIncognitoBrowserContext();
+        const page = await context.newPage();
         await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
 
         try {
@@ -57,9 +58,9 @@ async function scrapePrayerTimes() {
             // Yıllık veriyi alabilmek için, tıpkı tarayıcıda olduğu gibi "Yıl" listesini bulup tıklamamız gerekiyor
             // Ancak, en garantili yol: POST ile veya AJAX benzeri form göndererek 2026 bilgisini yollamaktır.
 
-            // Race condition (yarış durumu) olmaması için form submit işlemi ile sayfa bekleme işlemini eşzamanlı başlatıyoruz:
+            // Form yollama ve Sayfa yükleme senkronizasyonu
             await Promise.all([
-                page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 30000 }),
+                page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 30000 }),
                 page.evaluate(() => {
                     const form = document.createElement("form");
                     form.method = "POST";
@@ -74,8 +75,12 @@ async function scrapePrayerTimes() {
                 })
             ]);
 
-            // Şimdi post atıldı ve yeni sayfanın tab-2'sinde 365 gün yüklendi
-            await page.waitForSelector('#tab-2 table tbody tr', { timeout: 15000 });
+            // Yeni sayfanın tab-2'sinde YILLIK (en az 300 satır) gelene kadar bekle!
+            // Bu sayede 30 günlük aylık sayfayı çekerse bot bunu tam çekemedim sayıp hata verdirecek.
+            await page.waitForFunction(() => {
+                const rows = document.querySelectorAll('#tab-2 table tbody tr');
+                return rows.length > 300;
+            }, { timeout: 15000 });
 
             // Sayfanın DOM yapısına erişip JSON verisini ayıkla
             const prayerData = await page.evaluate(() => {
@@ -117,8 +122,9 @@ async function scrapePrayerTimes() {
         } catch (error) {
             console.log(`  -> HATA! Sayfa yüklenemedi veya CAPTCHA aşılamadı: ${error.message}`);
         } finally {
-            // Memory leak (bellek sızıntısı) ve geçmiş cache çakışmasını engellemek için mevcut sekmeyi kapat
+            // Memory leak (bellek sızıntısı) ve geçmiş cache çakışmasını engellemek için sekmeyi ve profili tamamen kapat
             await page.close();
+            await context.close();
         }
     }
 
