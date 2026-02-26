@@ -61,17 +61,18 @@ async function scrapePrayerTimes() {
             // Race condition (yarış durumu) olmaması için form submit işlemi ile sayfa bekleme işlemini eşzamanlı başlatıyoruz:
             await Promise.all([
                 page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 30000 }),
-                page.evaluate((id) => {
+                page.evaluate(() => {
                     const form = document.createElement("form");
                     form.method = "POST";
-                    form.action = `/tr-TR/${id}`;
+                    // URL yönlendirme kayıplarını (POST -> GET dönüşümünü) engellemek için mevcut uzun adrese POST ediyoruz:
+                    form.action = window.location.href;
                     const yrInput = document.createElement("input");
                     yrInput.name = "year";
                     yrInput.value = "2026";
                     form.appendChild(yrInput);
                     document.body.appendChild(form);
                     form.submit();
-                }, districtId)
+                })
             ]);
 
             // Şimdi post atıldı ve yeni sayfanın tab-2'sinde 365 gün yüklendi
