@@ -42,12 +42,11 @@ async function scrapePrayerTimes() {
         ]
     });
 
-    const page = await browser.newPage();
-
-    // Gerçek bir kullanıcı gibi görünmesi için User-Agent
-    await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
-
     for (const [districtName, districtId] of Object.entries(hata_veren_ilceler)) {
+        // Her ilçe için tertemiz yepyeni bir sekme aç (Eskiden kalan event/cookie kirliliğini önler)
+        const page = await browser.newPage();
+        await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+
         try {
             console.log(`\nİndiriliyor: ${districtName} (${districtId}) ...`);
 
@@ -117,6 +116,9 @@ async function scrapePrayerTimes() {
 
         } catch (error) {
             console.log(`  -> HATA! Sayfa yüklenemedi veya CAPTCHA aşılamadı: ${error.message}`);
+        } finally {
+            // Memory leak (bellek sızıntısı) ve geçmiş cache çakışmasını engellemek için mevcut sekmeyi kapat
+            await page.close();
         }
     }
 
