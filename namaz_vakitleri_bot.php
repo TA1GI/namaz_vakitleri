@@ -53,7 +53,7 @@ if (date('m') == '01') {
 }
 
 // TEST İÇİN MANUEL AYAR (İşiniz bitince bu satırı silin veya yorum yapın)
- $target_year = 2026; 
+// $target_year = 2026; 
 
 echo "Hedef Yıl: $target_year\n";
 echo "Limit: " . BATCH_LIMIT . "\n";
