@@ -26,6 +26,17 @@ jobs:
     - name: PHP Botunu Çalıştır
       run: php namaz_vakitleri_bot.php
 
+    - name: Kurulum - Node.js (CAPTCHA takılan ilçeler için)
+      uses: actions/setup-node@v3
+      with:
+        node-version: '20.x'
+        
+    - name: Paketleri Yükle (Puppeteer)
+      run: npm install
+
+    - name: Puppeteer Botunu Çalıştır (Eksik 9 ilçe)
+      run: node puppeteer_bot.js
+
     - name: Değişiklikleri Kaydet ve Gönder
       run: |
         git config --global user.name "Namaz Vakitleri Botu"
