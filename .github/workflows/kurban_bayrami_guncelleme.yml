@@ -1,0 +1,41 @@
+name: Kurban Bayramı Vakitlerini Güncelle
+
+on:
+  # Elle tetikleme (GitHub Actions sekmesinden "Run workflow")
+  workflow_dispatch:
+  
+  # Her gün Türkiye saati 03:00'da (UTC 00:00) çalışır
+  # Script kendi içinde tarih kontrolü yapar:
+  #   - Kurban Bayramı'na 7 günden fazla varsa → 1 saniyede kapanır (internete bağlanmaz)
+  #   - 7 gün veya daha az kaldıysa → Diyanet'ten verileri çeker
+  schedule:
+    - cron: '0 0 * * *'
+
+permissions:
+  contents: write
+
+jobs:
+  kontrol-ve-guncelle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: curl, json, mbstring
+
+      - name: Kurban Bayramı Kontrolü ve Veri Çekme
+        run: php scrape_kurban_bayrami.php
+
+      - name: Commit ve Push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add bayram_namazi.json
+          git diff --cached --quiet || git commit -m "Kurban bayramı vakitleri eklendi ($(date +'%Y'))"
+          git push
