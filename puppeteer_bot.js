@@ -56,23 +56,31 @@ async function scrapePrayerTimes() {
 
             // Diyanet sayfası normalde ilk girişte POST isteği almazsa aylık (30 günlük) tabloyu gösteriyor.
             // Yıllık veriyi alabilmek için, tıpkı tarayıcıda olduğu gibi "Yıl" listesini bulup tıklamamız gerekiyor
-            // Ancak, en garantili yol: POST ile veya AJAX benzeri form göndererek 2026 bilgisini yollamaktır.
+            // Ancak, en garantili yol: POST ile veya AJAX benzeri form göndererek hedef yılı yollamaktır.
+
+            // Yıl belirleme mantığı (PHP botu ile tamamen aynı)
+            const now = new Date();
+            const istanbulTime = new Date(now.toLocaleString("en-US", { timeZone: "Europe/Istanbul" }));
+            let targetYear = istanbulTime.getFullYear() + 1; // Normalde hep bir sonraki yıl
+            if (istanbulTime.getMonth() === 0) { // Eğer Ocak ayındaysak (0 = Ocak) mevcut yılı indir
+                targetYear = istanbulTime.getFullYear();
+            }
 
             // Form yollama ve Sayfa yükleme senkronizasyonu
             await Promise.all([
                 page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 30000 }),
-                page.evaluate(() => {
+                page.evaluate((id, year) => {
                     const form = document.createElement("form");
                     form.method = "POST";
                     // URL yönlendirme kayıplarını (POST -> GET dönüşümünü) engellemek için mevcut uzun adrese POST ediyoruz:
                     form.action = window.location.href;
                     const yrInput = document.createElement("input");
                     yrInput.name = "year";
-                    yrInput.value = "2026";
+                    yrInput.value = year.toString();
                     form.appendChild(yrInput);
                     document.body.appendChild(form);
                     form.submit();
-                })
+                }, districtId, targetYear)
             ]);
 
             // Yeni sayfanın tab-2'sinde YILLIK (en az 300 satır) gelene kadar bekle!
