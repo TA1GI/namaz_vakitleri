@@ -23,11 +23,7 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Setup PHP
-        uses: shivammathur/setup-php@v2
-        with:
-          php-version: '8.2'
-          extensions: curl, json, mbstring
+
 
       - name: Kurban Bayramı Kontrolü ve Veri Çekme
         run: php scrape_kurban_bayrami.php

@@ -41,10 +41,15 @@ if (!$data || !is_array($data)) {
 
 // "10 Zilhicce" olan günü bul (Kurban Bayramı = 10 Zilhicce)
 $kurban_miladi = null;
+$current_year = date('Y');
+
 foreach ($data as $entry) {
     if (isset($entry['hicriTarih']) && preg_match('/^10\s+Zilhicce/u', $entry['hicriTarih'])) {
-        $kurban_miladi = $entry['miladiTarih'];
-        break;
+        // Sadece bulunduğumuz yılın Kurban Bayramını dikkate al
+        if (strpos($entry['miladiTarih'], $current_year) !== false) {
+            $kurban_miladi = $entry['miladiTarih'];
+            break;
+        }
     }
 }
 
