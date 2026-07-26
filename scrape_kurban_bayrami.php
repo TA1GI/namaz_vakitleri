@@ -23,94 +23,10 @@ $reference_file = $repo_root . '/ARNAVUTKOY_9535.json';
 $bayram_file = $repo_root . '/bayram_namazi.json';
 
 // =============================================================
-// ADIM 1: REFERANS DOSYADAN KURBAN BAYRAMI TARİHİNİ BUL
+// TARİH KONTROLÜ MASTER SCRİPT (bayram_kontrol.py) TARAFINDAN
+// YAPILMAKTADIR. BU DOSYA SADECE ÇAĞRILDIĞINDA ÇALIŞIR.
 // =============================================================
-echo "=== KURBAN BAYRAMI NAMAZ VAKTİ BOTU ===\n\n";
 
-if (!file_exists($reference_file)) {
-    echo "❌ Referans dosya bulunamadı: ARNAVUTKOY_9535.json\n";
-    echo "   Henüz yıllık namaz vakitleri çekilmemiş olabilir.\n";
-    exit(0);
-}
-
-$data = json_decode(file_get_contents($reference_file), true);
-if (!$data || !is_array($data)) {
-    echo "❌ Referans dosya okunamadı veya geçersiz JSON.\n";
-    exit(1);
-}
-
-// "10 Zilhicce" olan günü bul (Kurban Bayramı = 10 Zilhicce)
-$kurban_miladi = null;
-$current_year = date('Y');
-
-foreach ($data as $entry) {
-    if (isset($entry['hicriTarih']) && preg_match('/^10\s+Zilhicce/u', $entry['hicriTarih'])) {
-        // Sadece bulunduğumuz yılın Kurban Bayramını dikkate al
-        if (strpos($entry['miladiTarih'], $current_year) !== false) {
-            $kurban_miladi = $entry['miladiTarih'];
-            break;
-        }
-    }
-}
-
-if (!$kurban_miladi) {
-    echo "❌ 10 Zilhicce (Kurban Bayramı) tarihi referans dosyada bulunamadı.\n";
-    exit(0);
-}
-
-echo "📅 Kurban Bayramı (Hicri) : 10 Zilhicce\n";
-echo "📅 Kurban Bayramı (Miladi): $kurban_miladi\n";
-
-// =============================================================
-// ADIM 2: MİLADİ TARİHİ PARSE ET VE GÜN FARKI HESAPLA
-// =============================================================
-$turkish_months = [
-    'Ocak' => 1, 'Şubat' => 2, 'Mart' => 3, 'Nisan' => 4,
-    'Mayıs' => 5, 'Haziran' => 6, 'Temmuz' => 7, 'Ağustos' => 8,
-    'Eylül' => 9, 'Ekim' => 10, 'Kasım' => 11, 'Aralık' => 12
-];
-
-// Format: "27 Mayıs 2026 Çarşamba" veya "06 Haziran 2025 Cuma"
-if (!preg_match('/(\d{1,2})\s+(\S+)\s+(\d{4})/u', $kurban_miladi, $m)) {
-    echo "❌ Tarih parse edilemedi: $kurban_miladi\n";
-    exit(1);
-}
-
-$day = (int)$m[1];
-$month_name = $m[2];
-$year = (int)$m[3];
-
-if (!isset($turkish_months[$month_name])) {
-    echo "❌ Ay adı tanınamadı: $month_name\n";
-    exit(1);
-}
-
-$month = $turkish_months[$month_name];
-$kurban_date = new DateTime("$year-$month-$day", new DateTimeZone('Europe/Istanbul'));
-$today = new DateTime('now', new DateTimeZone('Europe/Istanbul'));
-$today->setTime(0, 0, 0);
-
-$diff = $today->diff($kurban_date);
-$days_until = $diff->invert ? -$diff->days : $diff->days;
-
-echo "📆 Bugün              : " . $today->format('d.m.Y') . "\n";
-echo "⏳ Bayrama kalan gün  : $days_until\n\n";
-
-// =============================================================
-// ADIM 3: ZAMAN PENCERESİ KONTROLÜ
-// =============================================================
-if ($days_until > 7) {
-    echo "😴 Kurban Bayramı'na daha $days_until gün var. Henüz erken.\n";
-    echo "   7 gün veya daha az kalınca otomatik çalışacak.\n";
-    exit(0);
-}
-
-if ($days_until < -3) {
-    echo "✅ Kurban Bayramı geçmiş. Bu yıl için işlem tamamlanmış.\n";
-    exit(0);
-}
-
-echo "🚀 Kurban Bayramı'na $days_until gün kaldı! Kontrol başlıyor...\n\n";
 
 // =============================================================
 // ADIM 4: BAYRAM_NAMAZI.JSON KONTROLÜ
@@ -127,13 +43,8 @@ if (!$bayram_data || !is_array($bayram_data)) {
     exit(1);
 }
 
-// Kurban verisi zaten eklenmişse tekrar çekme
-$sample_key = array_key_first($bayram_data);
-if (isset($bayram_data[$sample_key]['kurban']) && !empty($bayram_data[$sample_key]['kurban'])) {
-    echo "✅ Kurban Bayramı vakitleri zaten bayram_namazi.json'da mevcut.\n";
-    echo "   Tekrar çekmeye gerek yok.\n";
-    exit(0);
-}
+// Master script zaten bu yılın verisi var mı diye kontrol edip çağırıyor.
+// Bu yüzden doğrudan çekim işlemine geçiyoruz.
 
 $district_ids = array_keys($bayram_data);
 $total = count($district_ids);

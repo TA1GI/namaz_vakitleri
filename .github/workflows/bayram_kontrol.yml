@@ -1,0 +1,51 @@
+name: Bayram Namazı Vakitleri Otomasyonu
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Her gece Türkiye saati ile 03:00'da (UTC 00:00) çalışır.
+    - cron: '0 0 * * *'
+
+permissions:
+  contents: write
+
+jobs:
+  bayram-kontrol:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Python kur
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: PHP Kurulumu
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: curl, json, mbstring
+
+      - name: Python Bağımlılıklarını yükle
+        run: pip install requests
+
+      - name: Master Kontrol Scriptini Çalıştır
+        run: python scripts/bayram_kontrol.py
+
+      - name: Değişiklikleri Kaydet ve Gönder
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          
+          # JSON verisi değişmişse ekle
+          git add bayram_namazi.json || true
+          
+          # Ping dosyası değişmişse ekle
+          git add ping.txt || true
+          
+          # Değişiklik varsa commit yap ve gönder
+          git diff --cached --quiet || git commit -m "Bayram/Ping güncellemesi ($(date +'%Y-%m-%d'))"
+          git push
