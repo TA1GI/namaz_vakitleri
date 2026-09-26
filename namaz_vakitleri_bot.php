@@ -101,7 +101,7 @@ function parsePrayerTimes($html) {
     $dom = new DOMDocument();
     @$dom->loadHTML('<?xml encoding="utf-8" ?>' . $html);
     $xpath = new DOMXPath($dom);
-    $rows = $xpath->query('//div[@id="tab-2"]//table/tbody/tr');
+    $rows = $xpath->query('//*[@id="tab-2"]//table/tbody/tr');
     if ($rows->length == 0) return null;
     $data = [];
     foreach ($rows as $row) {
