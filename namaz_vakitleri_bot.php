@@ -36,7 +36,14 @@ function archiveOldFiles() {
     foreach ($files as $file) {
         // Alt klasörleri hariç tut
         if (dirname($file) !== '.') continue;
-        rename($file, $archive_folder . '/' . basename($file));
+        
+        $basename = basename($file);
+        // Sistem dosyalarını ve bayram verisini arşivlemeden hariç tut
+        if (in_array($basename, ['bayram_namazi.json', 'package.json', 'package-lock.json'])) {
+            continue;
+        }
+        
+        rename($file, $archive_folder . '/' . $basename);
     }
     echo "[ARŞİV] Eski dosyalar taşındı.\n";
 }

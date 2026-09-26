@@ -17,6 +17,8 @@ import json
 import time
 import sys
 import html
+import os
+import shutil
 from html.parser import HTMLParser
 
 URL = "https://kurul.diyanet.gov.tr/Sayfalar/Imsakiye.aspx"
@@ -108,8 +110,48 @@ def extract_bayram_info(page_html):
     return None
 
 
+def archive_existing_bayram_file():
+    """Eğer eski bir bayram_namazi.json varsa, içindeki yıla bakarak ilgili yılın klasörüne taşır."""
+    file_path = "bayram_namazi.json"
+    if not os.path.exists(file_path):
+        return
+
+    try:
+        with open(file_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            
+        if not data:
+            return
+            
+        # İlk ilçenin verisini alıp tarihi bulalım
+        sample_key = list(data.keys())[0]
+        sample_entry = data[sample_key]
+        tarih = sample_entry.get("tarih", "")
+        
+        # Tarih formatı: "20 Mart 2026 Cuma" -> yılı çek
+        year = None
+        for word in tarih.split():
+            if word.isdigit() and len(word) == 4:
+                year = word
+                break
+                
+        if year:
+            archive_dir = str(year)
+            if not os.path.exists(archive_dir):
+                os.makedirs(archive_dir)
+            
+            archive_path = os.path.join(archive_dir, "bayram_namazi.json")
+            shutil.move(file_path, archive_path)
+            print(f"📦 Eski bayram verisi arşivlendi: {archive_path}")
+            
+    except Exception as e:
+        print(f"⚠️ Eski bayram dosyası arşivlenirken hata oluştu: {e}")
+
+
 def scrape_all():
     """Tüm il/ilçeler için bayram namazı vakitlerini çeker."""
+    archive_existing_bayram_file()
+    
     session = requests.Session()
     result = {}
     
