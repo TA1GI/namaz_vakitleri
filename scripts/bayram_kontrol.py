@@ -90,9 +90,19 @@ def update_ping():
     if not os.path.exists(PING_FILE):
         need_ping = True
     else:
-        mtime = os.path.getmtime(PING_FILE)
-        days_old = (time.time() - mtime) / (24 * 3600)
-        if days_old > 30:
+        try:
+            with open(PING_FILE, 'r', encoding='utf-8') as f:
+                content = f.read().strip()
+                if content.startswith("Last keep-alive ping: "):
+                    date_str = content.replace("Last keep-alive ping: ", "").strip()
+                    last_ping_date = datetime.strptime(date_str, "%Y-%m-%d %H:%M:%S")
+                    days_old = (datetime.now() - last_ping_date).days
+                    if days_old > 30:
+                        need_ping = True
+                else:
+                    need_ping = True
+        except Exception as e:
+            print(f"Ping file read error: {e}")
             need_ping = True
             
     if need_ping:
