@@ -3,8 +3,8 @@ name: Namaz Vakitlerini Güncelle
 on:
   workflow_dispatch:
   schedule:
-    # 1 Ocak ile 10 Ocak arasında, her saat başı çalıştır
-    - cron: '0 * 1-10 1 *'
+    # 1 Ekim ile 10 Ekim arasında, her saat başı çalıştır
+    - cron: '0 * 1-10 10 *'
 
 permissions:
   contents: write

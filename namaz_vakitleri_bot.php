@@ -16,58 +16,94 @@ ini_set('display_errors', 1);
 error_reporting(E_ALL);
 
 // =============================================================
-// 1. ARŞİVLEME MODÜLÜ (YILBAŞI TEMİZLİĞİ)
+// 1. AKILLI GÜNCELLEME VE ARŞİVLEME MODÜLÜ (İKİ YILLIK MİMARİ)
 // =============================================================
-function archiveOldFiles() {
-    // Sadece Ocak ayının ilk 15 gününde çalışsın
-    if (date('m') != '01' || date('d') > 15) return;
+// Arşivleme ve güncelleme işlemleri artık birlikte akilli_guncelleme() fonksiyonunda yapılmaktadır.
+// 1 Ocak bağımlılığı tamamen kaldırılmıştır.
 
-    $current_year = (int)date('Y'); 
-    $last_year = $current_year - 1; 
-    $archive_folder = DATA_DIR . '/' . $last_year;
-    
-    // Arşiv klasörü zaten varsa işlem yapma
-    if (is_dir($archive_folder)) return;
-
-    echo "[ARŞİV] $last_year klasörü oluşturuluyor...\n";
-    mkdir($archive_folder, 0755, true);
-    
-    $files = glob(DATA_DIR . '/*.json');
-    foreach ($files as $file) {
-        // Alt klasörleri hariç tut
-        if (dirname($file) !== '.') continue;
-        
-        $basename = basename($file);
-        // Sistem dosyalarını ve bayram verisini arşivlemeden hariç tut
-        if (in_array($basename, ['bayram_namazi.json', 'package.json', 'package-lock.json'])) {
-            continue;
-        }
-        
-        rename($file, $archive_folder . '/' . $basename);
-    }
-    echo "[ARŞİV] Eski dosyalar taşındı.\n";
-}
-
-archiveOldFiles();
-
-// =============================================================
-// 2. YIL BELİRLEME
-// =============================================================
 $target_year = (int)date('Y') + 1; 
-// Ocak ayındaysak o yılı (2026) indir
-if (date('m') == '01') {
-    $target_year = (int)date('Y');
-}
-
-// TEST İÇİN MANUEL AYAR (İşiniz bitince bu satırı silin veya yorum yapın)
-// $target_year = 2026; 
-
-echo "Hedef Yıl: $target_year\n";
+echo "Hedef Yıl (İndirilecek): $target_year\n";
 echo "Limit: " . BATCH_LIMIT . "\n";
 
 // =============================================================
 // 3. FONKSİYONLAR
 // =============================================================
+
+function akilli_guncelleme($filepath, $district_id, $target_year) {
+    $mevcut_yil = (int)date('Y');
+    
+    // 1. Mevcut dosyayı oku
+    $mevcut_data = [];
+    if (file_exists($filepath) && filesize($filepath) > 0) {
+        $mevcut_data = json_decode(file_get_contents($filepath), true);
+        if (!is_array($mevcut_data)) $mevcut_data = [];
+    }
+
+    // 2. Yılları grupla
+    $yil_gruplari = [];
+    foreach ($mevcut_data as $gun) {
+        if (preg_match('/\b(20\d{2})\b/', $gun['miladiTarih'], $match)) {
+            $yil_gruplari[$match[1]][] = $gun;
+        }
+    }
+
+    // 3. Eski yılları arşivle, yenileri koru
+    $korunan_data = [];
+    foreach ($yil_gruplari as $yil => $gunler) {
+        if ((int)$yil < $mevcut_yil) {
+            $arsiv_klasor = DATA_DIR . '/' . $yil;
+            $arsiv_dosya  = $arsiv_klasor . '/' . basename($filepath);
+            
+            if (!file_exists($arsiv_dosya)) {
+                if (!is_dir($arsiv_klasor)) mkdir($arsiv_klasor, 0755, true);
+                file_put_contents($arsiv_dosya, json_encode($gunler, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+            }
+        } else {
+            $korunan_data = array_merge($korunan_data, $gunler);
+        }
+    }
+
+    // 4. Hedef yıl zaten varsa atla
+    if (isset($yil_gruplari[(string)$target_year]) && count($yil_gruplari[(string)$target_year]) > 300) {
+        // Eski yıl arşivlendiği için dosyayı kalan verilerle güncelle
+        if (count($korunan_data) !== count($mevcut_data)) {
+            file_put_contents($filepath, json_encode($korunan_data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+        }
+        return "ATLANDI";
+    }
+
+    // 5. Yeni yılı Diyanet'ten indir
+    $html = fetchPrayerTimesHtml($district_id, $target_year);
+    if (!$html) return "HATA_BAGLANTI";
+
+    $yeni_data = parsePrayerTimes($html);
+    if (!$yeni_data || count($yeni_data) < 300) return "HATA_VERIYOK";
+
+    // KONTROL: Diyanet henüz hedef yılı yüklemediyse, eski yılı döndürüyor olabilir.
+    // İndirilen veride gerçekten hedef yıl var mı diye kontrol et:
+    $hedef_yil_bulundu = false;
+    foreach ($yeni_data as $gun) {
+        if (strpos($gun['miladiTarih'], (string)$target_year) !== false) {
+            $hedef_yil_bulundu = true;
+            break;
+        }
+    }
+    
+    if (!$hedef_yil_bulundu) {
+        // Eski yıl arşivlendiği için dosyayı kalan verilerle (korunan_data) güncelle
+        if (count($korunan_data) !== count($mevcut_data)) {
+            file_put_contents($filepath, json_encode($korunan_data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+        }
+        return "HATA_HEDEF_YOK (Diyanet henüz $target_year yüklememiş)";
+    }
+
+    // 6. Birleştir ve kaydet
+    $birlesik = array_merge($korunan_data, $yeni_data);
+    if (file_put_contents($filepath, json_encode($birlesik, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE))) {
+        return "OK (" . count($birlesik) . " gün)";
+    }
+    return "HATA_YAZMA";
+}
 
 function fetchPrayerTimesHtml($district_id, $year) {
     $url = "https://namazvakitleri.diyanet.gov.tr/tr-TR/{$district_id}";
@@ -242,38 +278,19 @@ foreach ($locations as $province => $districts) {
         $filename = "{$sanitized_name}_{$district_id}.json";
         $filepath = DATA_DIR . '/' . $filename;
 
-        // İÇERİK KONTROLÜ
-        if (file_exists($filepath) && filesize($filepath) > 0) {
-            $content = json_decode(file_get_contents($filepath), true);
-            if (is_array($content) && !empty($content)) {
-                $last_entry = end($content);
-                if (isset($last_entry['miladiTarih']) && strpos($last_entry['miladiTarih'], (string)$target_year) !== false) {
-                    continue; 
-                }
-            }
-        }
-
-        echo "İndiriliyor: $province - $district_name ($district_id) ... ";
-        $html = fetchPrayerTimesHtml($district_id, $target_year);
+        echo "İşleniyor: $province - $district_name ($district_id) ... ";
+        $sonuc = akilli_guncelleme($filepath, $district_id, $target_year);
         
-        if ($html) {
-            $data = parsePrayerTimes($html);
-            if ($data && count($data) > 10) { 
-                if(file_put_contents($filepath, json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE))) {
-                    echo "OK (" . count($data) . " gün veri)\n";
-                    $downloaded_count++;
-                    $consecutive_errors = 0; // Başarılı olunca sayacı sıfırla
-                } else {
-                    echo "HATA (Dosya yazılamadı)\n";
-                }
-                sleep(rand(2, 5));
-            } else {
-                echo "HATA (Veri Yok)\n";
-                $consecutive_errors++; // Hata sayacını artır
-            }
+        if ($sonuc === "ATLANDI") {
+            echo "Zaten güncel (ATLANDI)\n";
+        } elseif (strpos($sonuc, "OK") === 0) {
+            echo "$sonuc\n";
+            $downloaded_count++;
+            $consecutive_errors = 0;
+            sleep(rand(2, 5));
         } else {
-            echo "HATA (Bağlantı)\n";
-            $consecutive_errors++; // Hata sayacını artır
+            echo "$sonuc\n";
+            $consecutive_errors++;
         }
     }
 }
